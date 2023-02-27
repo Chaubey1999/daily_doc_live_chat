@@ -25,7 +25,6 @@ class _MessageListState extends State<MessageList> {
       throw Exception("Something went Wrong");
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
