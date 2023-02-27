@@ -145,7 +145,10 @@ class _ConversationListState extends State<ConversationList> {
                                       context,
                                       MaterialPageRoute(
                                           builder: (context) =>
-                                              const MessageList()),
+                                               MessageList(args: MessageArgs(
+                                                 id: snapshot.data!.data![index].id,
+                                                 title: snapshot.data!.data![index].title,
+                                               ),))
                                     );
                                   },
                                   child: ListTile(
