@@ -27,16 +27,18 @@ class MessageList extends StatefulWidget {
 class _MessageListState extends State<MessageList> {
   TextEditingController messageController = TextEditingController();
   String senderId = "";
-  List<MessageListModel> list = [] ;
-  StreamSocket streamSocket = StreamSocket();
+  List<String> list = [];
+  // int _currentPage = 0;
+  // int _messagePerPage = 20;
+  // List<MessageListModel> _message = [];
 
   void sendMessage(String text) async {
     String url =
         "https://dd-chat-0.onrender.com/api/conversations/63f5c489f32cc275764a7e15/messages";
     var headers = {'Content-Type': 'application/json'};
     var request = http.Request('POST', Uri.parse(url));
-    request.body = json.encode({"text":text,
-      "sender":"63cbba28bed83250e51dcc5d"});
+    request.body =
+        json.encode({"text": text, "sender": "63cbba28bed83250e51dcc5d"});
     request.headers.addAll(headers);
 
     http.StreamedResponse response = await request.send();
@@ -50,25 +52,6 @@ class _MessageListState extends State<MessageList> {
     }
   }
 
-  //   String url = "https://dd-chat-0.onrender.com/api/conversations/${widget.args!.id}/messages";
-  //   try{
-  //     Response response = await post(Uri.parse(url),
-  //     body: jsonEncode({
-  //       "text": text,
-  //       "sender": sender
-  //     })
-  //
-  //     );
-  //     if(response.statusCode==200){
-  //       print("Message send successful");
-  //     }else{
-  //       print("Failed");
-  //       print(url);
-  //     }
-  //   }catch(e){
-  //     print(e.toString());
-  //   }
-  // }
   Future<MessageListModel> getmessages() async {
     String url =
         "https://dd-chat-0.onrender.com/api/conversations/${widget.args!.id}/messages?nextCurser=${widget.args!.id}";
@@ -81,13 +64,41 @@ class _MessageListState extends State<MessageList> {
       throw Exception("Something went Wrong");
     }
   }
+  // Future<List<MessageListModel>> fetchMessgae(int a,int b) async {
+  //   String url =
+  //       "https://dd-chat-0.onrender.com/api/conversations/${widget.args!.id}/messages?nextCurser=${widget.args!.id}";
+  //   final response = await http.get(Uri.parse(url));
+  //   var data = jsonDecode(response.body.toString());
+  //   if (response.statusCode == 200) {
+  //     for(Map i in data){
+  //       _message.add(MessageListModel.fromJson(jsonDecode(i as String)));
+  //     }
+  //     print(url);
+  //     return _message;
+  //   } else {
+  //     throw Exception("Something went Wrong");
+  //   }
+  // }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       // bottomNavigationBar: sendMessageWidget(context, senderId),
       appBar: AppBar(
-        title: Text(widget.args!.title ?? ""),
+        title: ListTile(
+            leading: Container(
+              height: 50,
+              width: 50,
+              decoration: BoxDecoration(
+                  color: Colors.lightBlueAccent.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(30)),
+              child: Icon(
+                Icons.person_4,
+                size: 20,
+              ),
+            ),
+            title: Text(widget.args!.title ?? "")),
         leading: IconButton(
             onPressed: () {
               Navigator.pop(context);
@@ -106,38 +117,53 @@ class _MessageListState extends State<MessageList> {
                       child: ListView.separated(
                         itemCount: snapshot.data!.data!.messages!.length,
                         itemBuilder: (context, index) {
+                          // int firstIndex = _currentPage * _messagePerPage;
+                          // int lastIndex = firstIndex + _messagePerPage - 1;
                           senderId = snapshot
-                              .data!.data!.messages![index].conversation!.toString();
-                          return Align(
-                            alignment: Alignment.topRight,
-                            child: Column(
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                      color: Colors.lightBlueAccent,
-                                      borderRadius: BorderRadius.circular(8)),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Text(
-                                      snapshot.data!.data!.messages![index]
-                                              .text ??
-                                          "",
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14),
+                              .data!.data!.messages![index].conversation!
+                              .toString();
+                          // if (index >= firstIndex && index <= lastIndex) {
+                            return Align(
+                              alignment: Alignment.topRight,
+                              child: Column(
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                        color: Colors.lightBlueAccent,
+                                        borderRadius: BorderRadius.circular(8)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Text(
+                                        snapshot.data!.data!.messages![index]
+                                                .text ??
+                                            "",
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                Text(
-                                  FormattingMethods.conversationDate(
-                                      DateTime.parse(snapshot.data!.data!.messages![index].createdAt??"")),
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w400),
-                                )
-                              ],
-                            ),
-                          );
+                                  Text(
+                                    FormattingMethods.conversationDate(
+                                        DateTime.parse(snapshot.data!.data!
+                                                .messages![index].createdAt ??
+                                            "")),
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w400),
+                                  ),
+                                  // ElevatedButton(onPressed: (){
+                                  //   setState(() {
+                                  //     // _currentPage++;
+                                  //     // _message.addAll(fetchMessgae(_currentPage, _messagePerPage) as Iterable<MessageListModel>);
+                                  //   });
+                                  // }, child: Text("Load more"))
+                                ],
+                              ),
+                            );
+                          // }else{
+                          //   return Container();
+                          // }
                         },
                         separatorBuilder: (BuildContext context, int index) {
                           return SizedBox(
@@ -158,7 +184,7 @@ class _MessageListState extends State<MessageList> {
                   }
                 }),
             Align(
-                alignment : Alignment.bottomCenter,
+                alignment: Alignment.bottomCenter,
                 child: sendMessageWidget(context, senderId))
           ],
         ),
@@ -193,12 +219,6 @@ class _MessageListState extends State<MessageList> {
     );
   }
 }
-class StreamSocket {
-
-  final _socketResponse = StreamController<List<MessageListModel>>.broadcast();
-
-  void Function(List<MessageListModel>) get addResponse => _socketResponse.sink.add;
-  Stream<List<MessageListModel>> get getResponse => _socketResponse.stream.asBroadcastStream();
 
 
-}
+
