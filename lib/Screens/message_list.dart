@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
 
 import '../Models/message_list_model.dart';
+import '../Services/db_helper.dart';
 
 class MessageArgs {
   String? id;
@@ -109,6 +110,10 @@ class _MessageListState extends State<MessageList> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            ElevatedButton(onPressed: () async{
+              var dbQuery =await DatabaseHelper.instance.queryDb();
+              print(dbQuery.toString());
+            }, child: Text("Read")),
             FutureBuilder(
                 future: getmessages(),
                 builder: (context, AsyncSnapshot<MessageListModel> snapshot) {
@@ -137,7 +142,7 @@ class _MessageListState extends State<MessageList> {
                                         snapshot.data!.data!.messages![index]
                                                 .text ??
                                             "",
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                             fontWeight: FontWeight.w500,
                                             fontSize: 14),
                                       ),
@@ -210,7 +215,8 @@ class _MessageListState extends State<MessageList> {
         decoration: InputDecoration(hintText: "Send a message"),
       ),
       trailing: IconButton(
-        onPressed: () {
+        onPressed: () async{
+          await DatabaseHelper.instance.insertDb({DatabaseHelper.columnName: messageController.text});
           sendMessage(messageController.text);
           messageController.clear();
         },
