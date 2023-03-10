@@ -5,8 +5,8 @@ import 'package:daily_doc/Utils/utility_methods.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/http.dart';
-
+import 'package:pagination_view/pagination_view.dart';
+import '../Models/local_message_model.dart';
 import '../Models/message_list_model.dart';
 import '../Services/db_helper.dart';
 
@@ -14,7 +14,8 @@ class MessageArgs {
   String? id;
   String? title;
   String? sender;
-  MessageArgs({this.id, this.title, this.sender});
+  int messageId;
+  MessageArgs({this.id, this.title, this.sender, required this.messageId});
 }
 
 class MessageList extends StatefulWidget {
@@ -26,12 +27,15 @@ class MessageList extends StatefulWidget {
 }
 
 class _MessageListState extends State<MessageList> {
-  TextEditingController messageController = TextEditingController();
+  final TextEditingController messageController = TextEditingController();
   String senderId = "";
   List<String> list = [];
-  // int _currentPage = 0;
-  // int _messagePerPage = 20;
-  // List<MessageListModel> _message = [];
+  bool isLoadingData = false;
+  bool hasMoreData = true;
+  final ScrollController _scrollController = ScrollController();
+  int? page;
+  PaginationViewType? paginationViewType;
+  GlobalKey<PaginationViewState>? key;
 
   void sendMessage(String text) async {
     String url =
@@ -53,39 +57,55 @@ class _MessageListState extends State<MessageList> {
     }
   }
 
+  List<MessageListModel> messageList = [];
+  List<MessageModel> _message = [];
+
+  StreamSocket streamSocket = StreamSocket();
+
+  Future<List<MessageModel>> getLoacalMessage() async {
+    await DatabaseHelper.instance.insertDb(
+        MessageModel(id: widget.args!.messageId, name: messageController.text));
+    return _message;
+  }
+
+
   Future<MessageListModel> getmessages() async {
     String url =
         "https://dd-chat-0.onrender.com/api/conversations/${widget.args!.id}/messages?nextCurser=${widget.args!.id}";
     final response = await http.get(Uri.parse(url));
     var data = jsonDecode(response.body.toString());
     if (response.statusCode == 200) {
+      messageList.add(MessageListModel.fromJson(data));
       print(url);
       return MessageListModel.fromJson(data);
     } else {
       throw Exception("Something went Wrong");
     }
   }
-  // Future<List<MessageListModel>> fetchMessgae(int a,int b) async {
-  //   String url =
-  //       "https://dd-chat-0.onrender.com/api/conversations/${widget.args!.id}/messages?nextCurser=${widget.args!.id}";
-  //   final response = await http.get(Uri.parse(url));
-  //   var data = jsonDecode(response.body.toString());
-  //   if (response.statusCode == 200) {
-  //     for(Map i in data){
-  //       _message.add(MessageListModel.fromJson(jsonDecode(i as String)));
-  //     }
-  //     print(url);
-  //     return _message;
-  //   } else {
-  //     throw Exception("Something went Wrong");
-  //   }
-  // }
 
+  _refreshNotes() async {
+    final data = await DatabaseHelper.instance.getItems();
+    setState(() {
+      _message.addAll(data);
+    });
+  }
+
+  late DatabaseHelper _sqliteService;
+  void initState() {
+    page = -1;
+    paginationViewType = PaginationViewType.listView;
+    key = GlobalKey<PaginationViewState>();
+    _sqliteService = DatabaseHelper();
+    _sqliteService.initDB().whenComplete(() async {
+      await _refreshNotes();
+      setState(() {});
+    });
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // bottomNavigationBar: sendMessageWidget(context, senderId),
       appBar: AppBar(
         title: ListTile(
             leading: Container(
@@ -108,19 +128,27 @@ class _MessageListState extends State<MessageList> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            ElevatedButton(onPressed: () async{
-              var dbQuery =await DatabaseHelper.instance.queryDb();
-              print(dbQuery.toString());
-            }, child: Text("Read")),
-            FutureBuilder(
-                future: getmessages(),
-                builder: (context, AsyncSnapshot<MessageListModel> snapshot) {
-                  if (snapshot.hasData) {
-                    return Expanded(
-                      child: ListView.separated(
-                        itemCount: snapshot.data!.data!.messages!.length,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ElevatedButton(onPressed: () async {
+              //   var data = await DatabaseHelper.instance.queryDb();
+              //   // String path = await getDatabasesPath();
+              //   // print(path);
+              //   print(data);
+              // }, child: Text("Load")),
+              StreamBuilder(
+                  stream: getmessages().asStream(),
+                  builder: (context, AsyncSnapshot<MessageListModel> snapshot) {
+                    if (snapshot.hasData) {
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
+                        controller: _scrollController,
+                        itemCount: hasMoreData
+                            ? snapshot.data!.data!.messages!.length
+                            : snapshot.data!.data!.messages!.length,
                         itemBuilder: (context, index) {
                           // int firstIndex = _currentPage * _messagePerPage;
                           // int lastIndex = firstIndex + _messagePerPage - 1;
@@ -128,6 +156,7 @@ class _MessageListState extends State<MessageList> {
                               .data!.data!.messages![index].conversation!
                               .toString();
                           // if (index >= firstIndex && index <= lastIndex) {
+                          if (index < snapshot.data!.data!.messages!.length) {
                             return Align(
                               alignment: Alignment.topRight,
                               child: Column(
@@ -157,41 +186,139 @@ class _MessageListState extends State<MessageList> {
                                         fontSize: 12,
                                         fontWeight: FontWeight.w400),
                                   ),
-                                  // ElevatedButton(onPressed: (){
-                                  //   setState(() {
-                                  //     // _currentPage++;
-                                  //     // _message.addAll(fetchMessgae(_currentPage, _messagePerPage) as Iterable<MessageListModel>);
-                                  //   });
-                                  // }, child: Text("Load more"))
                                 ],
                               ),
                             );
-                          // }else{
-                          //   return Container();
-                          // }
+                          } else {
+                            return ListTile(
+                              title: Text("No more data"),
+                            );
+                          }
                         },
                         separatorBuilder: (BuildContext context, int index) {
                           return SizedBox(
                             height: 10,
                           );
                         },
-                      ),
-                    );
-                  } else if (snapshot.connectionState ==
-                      ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
-                  } else {
-                    return Center(
-                      child: Text("Something Went Wrong"),
-                    );
-                  }
-                }),
-            Align(
-                alignment: Alignment.bottomCenter,
-                child: sendMessageWidget(context, senderId))
-          ],
+                      );
+                    } else if (snapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    } else {
+                      return Center(
+                        child: Text("Something Went Wrong"),
+                      );
+                    }
+                  }),
+              StreamBuilder(
+                  stream: streamSocket.getResponse,
+                  builder:
+                      (context, AsyncSnapshot<List<MessageModel>> snapshot) {
+                    if (snapshot.hasData) {
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
+                        itemCount: snapshot.data!.length,
+                        itemBuilder: (context, index) {
+                          print(_message[index].name);
+                          return Align(
+                            alignment: Alignment.topRight,
+                            child: Column(
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                      color: Colors.lightBlueAccent,
+                                      borderRadius: BorderRadius.circular(8)),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Text(
+                                      snapshot.data![index].name ?? "",
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 14),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  "07:39",
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w400),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        separatorBuilder: (BuildContext context, int index) {
+                          return SizedBox(
+                            height: 10,
+                          );
+                        },
+                      );
+                    } else {
+                      return SizedBox.shrink();
+                    }
+                  }),
+              // StreamBuilder(
+              //   stream: streamSocket.getResponse,
+              //   builder: (BuildContext context, AsyncSnapshot<List<MessageModel>> snapshot) {
+              //     if(snapshot.connectionState == ConnectionState.waiting){
+              //       return Center(child: const CircularProgressIndicator());
+              //     }else if(snapshot.hasError){
+              //       return Text('error'+snapshot.error.toString());
+              //     }else if(snapshot.connectionState == ConnectionState.active){
+              //       return Expanded(
+              //         child: ListView.builder(
+              //             itemCount: snapshot.data!.length,
+              //             itemBuilder: (context, index){
+              //               return    Align(
+              //                 alignment: Alignment.topRight,
+              //                 child: Column(
+              //                   children: [
+              //                     Container(
+              //                       decoration: BoxDecoration(
+              //                           color: Colors.lightBlueAccent,
+              //                           borderRadius: BorderRadius.circular(8)),
+              //                       child: Padding(
+              //                         padding: const EdgeInsets.all(8.0),
+              //                         child: Text(
+              //                           snapshot.data![index]
+              //                               .name ??
+              //                               "",
+              //                           style: const TextStyle(
+              //                               fontWeight: FontWeight.w500,
+              //                               fontSize: 14),
+              //                         ),
+              //                       ),
+              //                     ),
+              //                     Text(
+              //                       "07:32 AM",
+              //                       style: TextStyle(
+              //                           fontSize: 12,
+              //                           fontWeight: FontWeight.w400),
+              //                     ),
+              //                   ],
+              //                 ),
+              //               );
+              //             }
+              //         ),
+              //       );
+              //     }else {
+              //       return Text('some thing went wrong');
+              //     }
+              //   },
+              // ),
+              if (isLoadingData)
+                Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator.adaptive()),
+              Align(
+                  alignment: Alignment.bottomCenter,
+                  child: sendMessageWidget(context, senderId))
+            ],
+          ),
         ),
       ),
     );
@@ -215,8 +342,15 @@ class _MessageListState extends State<MessageList> {
         decoration: InputDecoration(hintText: "Send a message"),
       ),
       trailing: IconButton(
-        onPressed: () async{
-          await DatabaseHelper.instance.insertDb({DatabaseHelper.columnName: messageController.text});
+        onPressed: () async {
+          widget.args?.messageId++;
+          _message.add(MessageModel(
+              id: widget.args!.messageId, name: messageController.text));
+          streamSocket.addResponse(_message);
+          messageController.clear();
+          // await DatabaseHelper.instance.insertDb({DatabaseHelper.columnName : messageController.text});
+          await DatabaseHelper.instance.insertDb(MessageModel(
+              id: widget.args!.messageId, name: messageController.text));
           sendMessage(messageController.text);
           messageController.clear();
         },
@@ -226,5 +360,10 @@ class _MessageListState extends State<MessageList> {
   }
 }
 
-
-
+class StreamSocket {
+  final _socketResponse = StreamController<List<MessageModel>>.broadcast();
+  void Function(List<MessageModel> event) get addResponse =>
+      _socketResponse.sink.add;
+  Stream<List<MessageModel>> get getResponse =>
+      _socketResponse.stream.asBroadcastStream();
+}
